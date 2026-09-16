@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Мобильный почтальон: 3 Полосы</title>
+    <script src="js/tailwind.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;700&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #34d399;
+            font-family: 'Fredoka', sans-serif;
+            touch-action: none;
+        }
+        #gameCanvas {
+            display: block;
+        }
+        .ui-element {
+            pointer-events: none;
+            user-select: none;
+        }
+
+        /* Стеклянный эффект для панелей */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+        }
+
+        .back-button {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            pointer-events: auto;
+            background: white;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .back-button:active { transform: scale(0.9); }
+
+        #speed-up-notif {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3.5rem;
+            font-weight: 900;
+            color: #fbbf24;
+            text-shadow: 0 4px 0 #b45309, 0 8px 15px rgba(0,0,0,0.3);
+            pointer-events: none;
+            opacity: 0;
+            z-index: 60;
+        }
+        .animate-speed-up {
+            animation: speedUpAnim 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        @keyframes speedUpAnim {
+            0% { opacity: 0; transform: translate(-50%, 0%) scale(0.5); }
+            30% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+            80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -100%) scale(0.8); }
+        }
+
+        .stat-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 4px 12px;
+            border-radius: 12px;
+        }
+        .stat-value { font-size: 1.25rem; font-weight: 700; line-height: 1; }
+        .stat-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; opacity: 0.7; }
+    </style>
+</head>
+<body>
+
+<button id="back-btn" class="back-button">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M3 12l9-9M3 12l9 9"/></svg>
+</button>
+
+<div id="game-container" class="relative w-full h-screen overflow-hidden">
+    <canvas id="gameCanvas"></canvas>
+    <div id="speed-up-notif">LEVEL UP!</div>
+
+    <!-- Обновленная панель статистики -->
+    <div class="absolute top-4 left-0 w-full flex justify-center ui-element">
+        <div class="glass-panel px-3 py-2 rounded-3xl flex gap-1 items-center">
+            <div class="stat-card">
+                <span class="stat-label text-green-600">Очки</span>
+                <span id="score" class="stat-value text-green-700">0</span>
+            </div>
+            <div class="w-[2px] h-8 bg-gray-200 mx-1"></div>
+            <div class="stat-card">
+                <span class="stat-label text-blue-600">Газеты</span>
+                <span id="ammo" class="stat-value text-blue-700">10</span>
+            </div>
+            <div class="w-[2px] h-8 bg-gray-200 mx-1"></div>
+            <div class="stat-card">
+                <span class="stat-label text-red-600">Жизни</span>
+                <span id="lives" class="stat-value text-red-700">3</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Красивое стартовое меню -->
+    <div id="start-screen" class="absolute inset-0 bg-emerald-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-6">
+        <div class="glass-panel rounded-[40px] p-8 text-center max-w-sm w-full shadow-2xl border-b-8 border-emerald-600">
+            <div class="w-24 h-24 bg-white/50 backdrop-blur-md rounded-3xl mx-auto mb-6 flex items-center justify-center shadow-lg transform -rotate-6 overflow-hidden">
+                <img src="img/app-icon.png" class="w-full h-full object-cover">
+            </div>
+            <h1 class="text-4xl font-black text-emerald-800 mb-2 leading-tight">ПОЧТАЛЬОН <br>ДРАЙВ</h1>
+            <p class="text-emerald-600/80 font-medium mb-8">Доставь все газеты вовремя!</p>
+
+            <button id="start-btn" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-5 rounded-3xl text-2xl shadow-[0_8px_0_#059669] active:shadow-none active:translate-y-2 transition-all pointer-events-auto mb-4">
+                ИГРАТЬ
+            </button>
+        </div>
+    </div>
+
+    <!-- Красивый Game Over -->
+    <div id="game-over-screen" class="absolute inset-0 bg-red-900/60 backdrop-blur-md flex items-center justify-center z-50 p-6 hidden">
+        <div class="glass-panel rounded-[40px] p-8 text-center max-w-sm w-full shadow-2xl border-b-8 border-red-600">
+            <h2 class="text-4xl font-black text-red-600 mb-2">ОЙ!</h2>
+            <p class="text-gray-600 mb-6 text-lg">Игра окончена. Твой результат:</p>
+            <div class="bg-emerald-50 rounded-2xl py-4 mb-8">
+                <span id="final-score" class="text-5xl font-black text-emerald-600">0</span>
+            </div>
+            <button id="restart-btn" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-5 rounded-3xl text-2xl shadow-[0_8px_0_#991b1b] active:shadow-none active:translate-y-2 transition-all pointer-events-auto">
+                ПОВТОРИТЬ
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const ammoEl = document.getElementById('ammo');
+    const livesEl = document.getElementById('lives');
+    const deliveredEl = document.getElementById('delivered');
+    const finalScoreEl = document.getElementById('final-score');
+    const startScreen = document.getElementById('start-screen');
+    const gameOverScreen = document.getElementById('game-over-screen');
+    const speedUpNotif = document.getElementById('speed-up-notif');
+    const startBtn = document.getElementById('start-btn');
+    const restartBtn = document.getElementById('restart-btn');
+    const backBtn = document.getElementById('back-btn');
+
+    // --- ЗАГРУЗКА РЕСУРСОВ ---
+    let assetsLoaded = 0;
+    const totalAssets = 4;
+    function assetLoaded() {
+        assetsLoaded++;
+        console.log(`Assets loaded: ${assetsLoaded}/${totalAssets}`);
+    }
+
+    const houseImg = new Image();
+    houseImg.onload = assetLoaded;
+    houseImg.src = 'img/house.png';
+
+    const paperImg = new Image();
+    paperImg.onload = assetLoaded;
+    paperImg.src = 'img/paper.png';
+
+    const barrierImg = new Image();
+    barrierImg.onload = assetLoaded;
+    barrierImg.src = 'img/barier.png';
+
+    const playerImg = new Image();
+    playerImg.onload = assetLoaded;
+    playerImg.src = 'img/besicle.png';
+
+    // Аудио
+    const throwSound = new Audio('sounds/throw.mp3');
+    const failSound = new Audio('sounds/fail.mp3');
+    const successSound = new Audio('sounds/success.mp3');
+    const pickupSound = new Audio('sounds/pickup.mp3');
+
+    throwSound.volume = 0.5;
+    failSound.volume = 0.3;
+    successSound.volume = 0.4;
+    pickupSound.volume = 0.4;
+
+    let gameActive = false;
+    let score = 0;
+    let deliveredCount = 0;
+    let speed = 5;
+    let pointValue = 10;
+    let frameId;
+
+    let roadWidth, roadX, laneWidth;
+    let player = {
+        lane: 1,
+        x: 0,
+        y: 0,
+        targetX: 0,
+        size: 25,
+        ammo: 10,
+        lives: 3,
+        invuln: 0
+    };
+
+    let newspapers = [];
+    let houses = [];
+    let trees = [];
+    let obstacles = [];
+    let pickups = [];
+    let roadMarkersY = 0;
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    const swipeThreshold = 40;
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        roadWidth = Math.min(canvas.width * 0.85, 450);
+        roadX = (canvas.width - roadWidth) / 2;
+        laneWidth = roadWidth / 3;
+
+        player.y = canvas.height * 0.8;
+        updatePlayerTargetX();
+        player.x = player.targetX;
+    }
+
+    function updatePlayerTargetX() {
+        player.targetX = roadX + (player.lane * laneWidth) + (laneWidth / 2);
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+
+    function updateUI() {
+        if (scoreEl) scoreEl.innerText = Math.floor(score);
+        if (ammoEl) ammoEl.innerText = player.ammo;
+        if (livesEl) livesEl.innerText = player.lives;
+    }
+
+    function showSpeedUpNotification() {
+        if (!speedUpNotif) return;
+        speedUpNotif.classList.remove('animate-speed-up');
+        void speedUpNotif.offsetWidth;
+        speedUpNotif.classList.add('animate-speed-up');
+    }
+
+    function initGame() {
+        if (gameActive) return;
+
+        // Сброс состояния
+        score = 0;
+        deliveredCount = 0;
+        speed = 5;
+        pointValue = 10;
+        newspapers = [];
+        houses = [];
+        trees = [];
+        obstacles = [];
+        pickups = [];
+        player.ammo = 10;
+        player.lives = 3;
+        player.lane = 1;
+        player.invuln = 0;
+
+        resize(); // Пересчитываем координаты перед стартом
+        updateUI();
+
+        // Спавним начальные деревья
+        for(let i = 0; i < 8; i++) {
+            trees.push({
+                x: Math.random() < 0.5 ? Math.random() * (roadX - 50) : roadX + roadWidth + 20 + Math.random() * 50,
+                y: Math.random() * canvas.height
+            });
+        }
+
+        startScreen.classList.add('hidden');
+        gameOverScreen.classList.add('hidden');
+
+        gameActive = true;
+        lastTime = performance.now();
+        animate(performance.now());
+    }
+
+    // --- УПРАВЛЕНИЕ ---
+    canvas.addEventListener('touchstart', e => {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+    });
+
+    canvas.addEventListener('touchend', e => {
+        if (!gameActive) return;
+        const touchEndX = e.changedTouches[0].clientX;
+        const touchEndY = e.changedTouches[0].clientY;
+        const dx = touchEndX - touchStartX;
+        const dy = touchEndY - touchStartY;
+
+        if (Math.abs(dx) > swipeThreshold && Math.abs(dx) > Math.abs(dy)) {
+            if (dx > 0 && player.lane < 2) player.lane++;
+            else if (dx < 0 && player.lane > 0) player.lane--;
+            updatePlayerTargetX();
+        } else if (Math.abs(dy) < swipeThreshold && Math.abs(dx) < swipeThreshold) {
+            const side = touchEndX < canvas.width / 2 ? -1 : 1;
+            throwNewspaper(side);
+        }
+    });
+
+    window.addEventListener('keydown', e => {
+        if (!gameActive) return;
+        if ((e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') && player.lane > 0) player.lane--;
+        if ((e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') && player.lane < 2) player.lane++;
+        updatePlayerTargetX();
+    });
+
+    canvas.addEventListener('mousedown', e => {
+        if (!gameActive) return;
+        if (e.button === 0) {
+            const side = e.clientX < canvas.width / 2 ? -1 : 1;
+            throwNewspaper(side);
+        }
+    });
+
+    function throwNewspaper(side) {
+        if (player.ammo <= 0) return;
+        player.ammo--;
+        updateUI();
+        throwSound.currentTime = 0;
+        throwSound.play().catch(() => {});
+        newspapers.push({ x: player.x, y: player.y, vx: side * 12, vy: -1, delivered: false });
+    }
+
+    function spawnHouse() {
+        if (Math.random() < 0.035) {
+            const side = Math.random() < 0.5 ? 'left' : 'right';
+            const x = side === 'left' ? roadX - 110 : roadX + roadWidth + 10;
+            const lastHouse = houses[houses.length - 1];
+            if (!lastHouse || lastHouse.y > 220) {
+                houses.push({ x: x, y: -150, w: 100, h: 120, side: side, color: `hsl(${Math.random() * 40 + 20}, 70%, 40%)`, hit: false });
+            }
+        }
+    }
+
+    let roadSpawnTimer = 0;
+    function manageRoadObjects() {
+        roadSpawnTimer++;
+        if (roadSpawnTimer > 60 / (speed / 5)) {
+            roadSpawnTimer = 0;
+            const lane = Math.floor(Math.random() * 3);
+            const type = Math.random() < 0.3 ? 'pickup' : 'obstacle';
+            const x = roadX + (lane * laneWidth) + (laneWidth / 2);
+
+            if (type === 'obstacle') {
+                obstacles.push({ x, y: -100, lane, size: 22 });
+            } else {
+                pickups.push({ x, y: -100, lane, size: 15 });
+            }
+        }
+    }
+
+    function update() {
+        if (!gameActive) return;
+        if (player.invuln > 0) player.invuln--;
+        roadMarkersY = (roadMarkersY + speed) % 100;
+
+        player.x += (player.targetX - player.x) * 0.2;
+
+        spawnHouse();
+        manageRoadObjects();
+
+        // Дома
+        for (let i = houses.length - 1; i >= 0; i--) {
+            houses[i].y += speed;
+            if (houses[i].y > canvas.height + 100) {
+                houses.splice(i, 1);
+            }
+        }
+
+        // Препятствия
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            obstacles[i].y += speed;
+            const dx = player.x - obstacles[i].x;
+            const dy = player.y - obstacles[i].y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+
+            if (player.invuln === 0 && dist < 40) {
+                player.lives--;
+                player.invuln = 60;
+                failSound.currentTime = 0;
+                failSound.play().catch(() => {});
+                obstacles.splice(i, 1);
+                if (player.lives <= 0) endGame();
+                updateUI();
+                continue;
+            }
+            if (obstacles[i].y > canvas.height + 100) obstacles.splice(i, 1);
+        }
+
+        // Бонусы (Газеты)
+        for (let i = pickups.length - 1; i >= 0; i--) {
+            pickups[i].y += speed;
+            const dx = player.x - pickups[i].x;
+            const dy = player.y - pickups[i].y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+
+            if (dist < 40) {
+                player.ammo += 1;
+                pickupSound.currentTime = 0;
+                pickupSound.play().catch(() => {});
+                pickups.splice(i, 1);
+                updateUI();
+                continue;
+            }
+            if (pickups[i].y > canvas.height + 100) pickups.splice(i, 1);
+        }
+
+        // Газеты в полете
+        for (let i = newspapers.length - 1; i >= 0; i--) {
+            let n = newspapers[i];
+            n.x += n.vx;
+            n.y += n.vy;
+            houses.forEach(h => {
+                if (!h.hit && n.x > h.x && n.x < h.x + h.w && n.y > h.y && n.y < h.y + h.h) {
+                    h.hit = true;
+                    n.delivered = true;
+                    score += pointValue;
+                    deliveredCount++;
+                    flashUI('plus');
+                    successSound.currentTime = 0;
+                    successSound.play().catch(() => {});
+
+                    if (deliveredCount % 5 === 0) {
+                        speed *= 1.1;
+                        pointValue *= 1.1;
+                        player.lives++;
+                        showSpeedUpNotification();
+                    }
+                    updateUI();
+                }
+            });
+            if (n.x < -50 || n.x > canvas.width + 50 || n.y < -50) newspapers.splice(i, 1);
+            else if (n.delivered) newspapers.splice(i, 1);
+        }
+
+        trees.forEach(t => {
+            t.y += speed;
+            if (t.y > canvas.height + 50) {
+                t.y = -100;
+                t.x = Math.random() < 0.5 ? Math.random() * (roadX - 50) : roadX + roadWidth + 20 + Math.random() * 50;
+            }
+        });
+    }
+
+    function endGame() {
+        gameActive = false;
+        finalScoreEl.innerText = Math.floor(score);
+        gameOverScreen.classList.remove('hidden');
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#22c55e';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#4b5563';
+        ctx.fillRect(roadX, 0, roadWidth, canvas.height);
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.setLineDash([20, 20]);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(roadX + laneWidth, 0); ctx.lineTo(roadX + laneWidth, canvas.height);
+        ctx.moveTo(roadX + laneWidth * 2, 0); ctx.lineTo(roadX + laneWidth * 2, canvas.height);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([40, 40]);
+        ctx.beginPath();
+        ctx.moveTo(canvas.width / 2, roadMarkersY - 100);
+        ctx.lineTo(canvas.width / 2, canvas.height + 100);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#9ca3af';
+        ctx.fillRect(roadX - 10, 0, 10, canvas.height);
+        ctx.fillRect(roadX + roadWidth, 0, 10, canvas.height);
+
+        trees.forEach(t => {
+            ctx.fillStyle = '#14532d';
+            ctx.beginPath(); ctx.arc(t.x, t.y, 25, 0, Math.PI * 2); ctx.fill();
+        });
+
+        houses.forEach(h => {
+            if (h.hit) {
+                ctx.globalAlpha = 0.6; // Делаем дом полупрозрачным, если в него попали
+            }
+            ctx.drawImage(houseImg, h.x, h.y, h.w, h.h);
+            ctx.globalAlpha = 1.0;
+
+            if (h.hit) {
+                ctx.fillStyle = '#fef08a';
+                ctx.font = '30px Arial';
+                ctx.fillText('📩', h.x + h.w/2 - 15, h.y + h.h/2 + 10);
+            }
+        });
+
+        // ПРЕПЯТСТВИЯ (Используем картинку)
+        obstacles.forEach(o => {
+            const w = laneWidth * 0.8;
+            const h = w * 0.8;
+            ctx.drawImage(barrierImg, o.x - w/2, o.y - h/2, w, h);
+        });
+
+        // ПОДБИРАЕМЫЕ ГАЗЕТЫ (Используем картинку)
+        pickups.forEach(p => {
+            const size = 40;
+            ctx.drawImage(paperImg, p.x - size/2, p.y - size/2, size, size);
+        });
+
+        newspapers.forEach(n => {
+            ctx.save();
+            ctx.translate(n.x, n.y);
+            ctx.rotate(Date.now() * 0.02);
+            ctx.drawImage(paperImg, -15, -15, 30, 30);
+            ctx.restore();
+        });
+
+        // Игрок (Используем картинку велосипеда)
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        if (player.invuln % 10 < 5) {
+            const pSize = 70;
+            ctx.drawImage(playerImg, -pSize/2, -pSize/2, pSize, pSize);
+        }
+        ctx.restore();
+    }
+
+    let lastTime = 0;
+    const fps = 60;
+    const fpsInterval = 1000 / fps;
+
+    function animate(currentTime) {
+        if (!gameActive) return;
+        frameId = requestAnimationFrame(animate);
+
+        // Если currentTime не передан (первый кадр), берем его вручную
+        const now = currentTime || performance.now();
+        const elapsed = now - lastTime;
+
+        if (elapsed > fpsInterval) {
+            lastTime = now - (elapsed % fpsInterval);
+            update();
+            draw();
+        }
+    }
+
+    startBtn.addEventListener('click', () => {
+        initGame();
+    });
+
+    restartBtn.addEventListener('click', () => {
+        initGame();
+    });
+
+    backBtn.addEventListener('click', () => {
+        gameActive = false;
+        cancelAnimationFrame(frameId);
+        startScreen.classList.remove('hidden');
+        gameOverScreen.classList.add('hidden');
+    });
+</script>
+</body>
+</html>
