@@ -1,0 +1,28 @@
+# Сборка и временные файлы Gradle
+*.iml
+.gradle
+/build
+/*/build
+
+# Кэш и настройки Android Studio / IntelliJ IDEA
+.idea/*
+
+# Локальные пути SDK и NDK (создаются автоматически студией)
+local.properties
+
+# Логи и дампы
+captures/
+.externalNativeBuild
+.cxx/
+*.log
+
+# Ключи подписи приложения (Keystores) — никогда не коммитить в публичные репозитории
+*.jks
+*.keystore
+
+# Google Services (если содержат приватные API-ключи, раскомментируйте при необходимости)
+# google-services.json
+
+# Системные файлы ОС
+.DS_Store
+Thumbs.db
