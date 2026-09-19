@@ -48,6 +48,7 @@ class MainActivity : AppCompatActivity() {
     private var mediaPlayer: MediaPlayer? = null
     private var currentMusicTrack: String? = null
     private val handler = Handler(Looper.getMainLooper())
+    private var lastStatsUpdate = 0L
     private val musicTracks = listOf("sounds/fone_music.mp3", "sounds/fone_music-2.mp3", "sounds/fone_music-3.mp3")
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,7 +88,9 @@ class MainActivity : AppCompatActivity() {
 
         // Слушатели
         gameView.onUpdateListener = {
-            runOnUiThread {
+            val now = System.currentTimeMillis()
+            if (now - lastStatsUpdate >= 100L) {
+                lastStatsUpdate = now
                 tvScore.text = gameView.score.toString()
                 tvLives.text = gameView.lives.toString()
                 tvCoins.text = gameView.sessionCoins.toString()
@@ -101,42 +104,34 @@ class MainActivity : AppCompatActivity() {
             saveHighScore(finalScore)
             addCoins(gameView.sessionCoins)
             stopMusic()
-            runOnUiThread {
-                gameOverScreen.visibility = View.VISIBLE
-                statsPanel.visibility = View.GONE
-                btnPause.visibility = View.GONE
-                modifierContainer.visibility = View.GONE
-                tvFinalScore.text = finalScore.toString()
-                updatePersistentUI()
-            }
+            gameOverScreen.visibility = View.VISIBLE
+            statsPanel.visibility = View.GONE
+            btnPause.visibility = View.GONE
+            modifierContainer.visibility = View.GONE
+            tvFinalScore.text = finalScore.toString()
+            updatePersistentUI()
         }
 
         gameView.onBonusListener = { type ->
-            runOnUiThread {
-                when(type) {
-                    "life" -> showNotification(R.drawable.heart2, "+1 Жизнь!", 0xFFEF4444.toInt())
-                    "coin" -> showNotification(R.drawable.coin, "+50 Монет!", 0xFFFACC15.toInt())
-                }
+            when(type) {
+                "life" -> showNotification(R.drawable.heart2, "+1 Жизнь!", 0xFFEF4444.toInt())
+                "coin" -> showNotification(R.drawable.coin, "+50 Монет!", 0xFFFACC15.toInt())
             }
         }
 
         gameView.onComboListener = { combo ->
-            runOnUiThread {
-                if (combo >= 3) {
-                    tvCombo.visibility = View.VISIBLE
-                    tvCombo.text = "COMBO X${if (combo > 5) 3 else 2}!"
-                } else {
-                    tvCombo.visibility = View.GONE
-                }
+            if (combo >= 3) {
+                tvCombo.visibility = View.VISIBLE
+                tvCombo.text = "COMBO X${if (combo > 5) 3 else 2}!"
+            } else {
+                tvCombo.visibility = View.GONE
             }
         }
 
-        gameView.onSpeedUpListener = { runOnUiThread { showSpeedUpNotification() } }
+        gameView.onSpeedUpListener = { showSpeedUpNotification() }
 
         gameView.onModifierActivated = {
-            runOnUiThread {
-                showNotification(R.drawable.paper, "УДВОЕНИЕ АКТИВИРОВАНО!", 0xFFFACC15.toInt())
-            }
+            showNotification(R.drawable.paper, "УДВОЕНИЕ АКТИВИРОВАНО!", 0xFFFACC15.toInt())
         }
 
         // Кнопки

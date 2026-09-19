@@ -66,12 +66,16 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
     private val SPAWN_COOLDOWN = 0.5f // Уменьшил (было 0.8) для динамики
 
     // Графика
-    private val bitmaps = mutableMapOf<String, Bitmap>()
+    private val bitmaps = mutableMapOf<String, Bitmap?>()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.BLACK
         alpha = 60
     }
+    private val rect = RectF()
+    private val playerRect = RectF(-90f, -90f, 90f, 90f)
+    private val rng = Random()
+    private var carSource: Bitmap? = null
     
     // Окружение
     private var grassColor = Color.parseColor("#34d399")
@@ -123,20 +127,29 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
     }
 
     private fun loadBitmaps() {
-        val assets = context.assets
         try {
-            bitmaps["house"] = BitmapFactory.decodeStream(assets.open("img/house.png"))
-            bitmaps["paper"] = BitmapFactory.decodeStream(assets.open("img/paper.png"))
-            bitmaps["barrier"] = BitmapFactory.decodeStream(assets.open("img/barier.png"))
-            bitmaps["car"] = BitmapFactory.decodeStream(assets.open("img/car.png"))
-            bitmaps["bicycle"] = BitmapFactory.decodeStream(assets.open("img/character.png"))
-            bitmaps["heart"] = BitmapFactory.decodeStream(assets.open("img/heart2.png"))
-            bitmaps["coin"] = BitmapFactory.decodeStream(assets.open("img/coin.png"))
-            bitmaps["obs_car"] = BitmapFactory.decodeStream(assets.open("img/obs_car.png"))
-            bitmaps["obs_box"] = BitmapFactory.decodeStream(assets.open("img/obs_box.png"))
+            bitmaps["house"] = decodeScaled("img/house.png", 420, 420)
+            bitmaps["paper"] = decodeScaled("img/paper.png", 60, 60)
+            bitmaps["barrier"] = decodeScaled("img/barier.png", 220, 200)
+            bitmaps["bicycle"] = decodeScaled("img/character.png", 180, 180)
+            bitmaps["heart"] = decodeScaled("img/heart2.png", 100, 100)
+            bitmaps["coin"] = decodeScaled("img/coin.png", 100, 100)
+            bitmaps["obs_car"] = decodeScaled("img/obs_car.png", 220, 200)
+            bitmaps["obs_box"] = decodeScaled("img/obs_box.png", 220, 200)
+            carSource = BitmapFactory.decodeStream(context.assets.open("img/car.png"))
+            bitmaps["car"] = carSource
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    // Только уменьшаем до целевого размера; апскейл размыл бы картинку и раздул память
+    private fun decodeScaled(file: String, w: Int, h: Int): Bitmap? {
+        val src = BitmapFactory.decodeStream(context.assets.open(file)) ?: return null
+        if (src.width <= w && src.height <= h) return src
+        val scaled = Bitmap.createScaledBitmap(src, w, h, true)
+        src.recycle()
+        return scaled
     }
 
     private fun initSounds() {
@@ -186,7 +199,7 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
     private fun setupTrees() {
         trees.clear()
         repeat(12) {
-            trees.add(Tree(Random().nextFloat(), Random().nextFloat() * 2000f))
+            trees.add(Tree(rng.nextFloat(), rng.nextFloat() * 2000f))
         }
     }
 
@@ -252,6 +265,13 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
         player.x = player.targetX
         baseSpeedPxPerSec = h.toFloat() / 3.8f // Вернул скорость (было 4.5)
         if (currentSpeed == 0f) currentSpeed = baseSpeedPxPerSec
+        // Машины рисуются в размер, зависящий от ширины полосы — пре-скейлим под экран
+        carSource?.let { src ->
+            val carW = (laneWidth - 10).toInt().coerceAtLeast(10)
+            if (src.width > carW || src.height > 280) {
+                bitmaps["car"] = Bitmap.createScaledBitmap(src, carW, 280, true)
+            }
+        }
     }
 
     private fun updatePlayerPos() {
@@ -260,7 +280,7 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
 
     override fun onDraw(canvas: Canvas) {
         if (cameraShakeTime > 0) {
-            canvas.translate((Random().nextFloat() - 0.5f) * 30f, (Random().nextFloat() - 0.5f) * 30f)
+            canvas.translate((rng.nextFloat() - 0.5f) * 30f, (rng.nextFloat() - 0.5f) * 30f)
         }
         drawGame(canvas)
         if (gameActive && !isPaused) onUpdateListener?.invoke()
@@ -285,10 +305,11 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
 
         score += (currentSpeed * dt / height * 10f).toInt()
 
+        val exp = Math.pow(0.001, dt.toDouble()).toFloat()
         val dx = player.targetX - player.x
-        player.x += dx * (1.0f - Math.pow(0.001, dt.toDouble()).toFloat())
+        player.x += dx * (1.0f - exp)
         targetTilt = (dx / 40f).coerceIn(-20f, 20f)
-        playerTilt += (targetTilt - playerTilt) * (1.0f - Math.pow(0.001, dt.toDouble()).toFloat())
+        playerTilt += (targetTilt - playerTilt) * (1.0f - exp)
 
         spawnObjects(dt)
 
@@ -348,8 +369,8 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
 
     private fun spawnExplosion(x: Float, y: Float, color: Int, count: Int, baseVel: Float, onlyUp: Boolean = false) {
         repeat(count) {
-            val vx = (Random().nextFloat() - 0.5f) * baseVel * 2f
-            val vy = if (onlyUp) -Random().nextFloat() * baseVel * 2f else (Random().nextFloat() - 0.5f) * baseVel * 2f
+            val vx = (rng.nextFloat() - 0.5f) * baseVel * 2f
+            val vy = if (onlyUp) -rng.nextFloat() * baseVel * 2f else (rng.nextFloat() - 0.5f) * baseVel * 2f
             particles.add(Particle(x, y, color, vx, vy))
         }
     }
@@ -364,7 +385,7 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
 
     private fun updateWeather(dt: Float) {
         if (grassColor == levelColors[2]) {
-            if (Random().nextFloat() < 0.3f) rainDrops.add(RainDrop(Random().nextFloat() * width, -10f))
+            if (rng.nextFloat() < 0.3f) rainDrops.add(RainDrop(rng.nextFloat() * width, -10f))
         }
         val it = rainDrops.iterator()
         while (it.hasNext()) { val d = it.next(); d.y += 1500f * dt; if (d.y > height) it.remove() }
@@ -372,9 +393,9 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
 
     private fun updateSpeedLines(dt: Float) {
         if (currentSpeed > baseSpeedPxPerSec * 1.5f) {
-            if (Random().nextFloat() < 0.2f) {
-                val side = if (Random().nextBoolean()) 0f else width.toFloat()
-                speedLines.add(SpeedLine(side + (Random().nextFloat() - 0.5f) * 100f, Random().nextFloat() * height))
+            if (rng.nextFloat() < 0.2f) {
+                val side = if (rng.nextBoolean()) 0f else width.toFloat()
+                speedLines.add(SpeedLine(side + (rng.nextFloat() - 0.5f) * 100f, rng.nextFloat() * height))
             }
         }
         val it = speedLines.iterator()
@@ -388,8 +409,8 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
 
     private fun spawnObjects(dt: Float) {
         // Спавн домов (вне дороги) - реже
-        if (Random().nextFloat() < 0.015f * (deltaTime * 120f)) {
-            val side = if (Random().nextBoolean()) -1 else 1
+        if (rng.nextFloat() < 0.015f * (deltaTime * 120f)) {
+            val side = if (rng.nextBoolean()) -1 else 1
             val x = if (side == -1) roadX - 180f else roadX + roadWidth + 180f
             if (houses.none { it.y < 420 }) houses.add(House(x, -420f))
         }
@@ -398,7 +419,7 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
         if (globalSpawnTimer > 0) return
 
         // Выбираем полосу
-        val lane = Random().nextInt(3)
+        val lane = rng.nextInt(3)
         val x = roadX + (lane * laneWidth) + (laneWidth / 2)
         
         // ПРАВИЛО: Не спавним, если на полосе кто-то уже есть близко к верху
@@ -409,7 +430,7 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
         val otherLanesDanger = (0..2).filter { it != lane }.count { lastSpawnY[it] < 300f }
         val isBlocked = otherLanesDanger >= 2
 
-        val rand = Random().nextFloat()
+        val rand = rng.nextFloat()
         val isDouble = activeModifier == "double" && modifierTimeRemaining > 0
         
         var spawned = false
@@ -436,7 +457,7 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
             }
             // Препятствие (статичное) - увеличил шанс
             rand < 0.70f && !isBlocked -> {
-                val obsType = if (Random().nextBoolean()) "obs_car" else "obs_box"
+                val obsType = if (rng.nextBoolean()) "obs_car" else "obs_box"
                 obstacles.add(Obstacle(x, -300f, obsType))
                 lastSpawnY[lane] = -300f
                 spawned = true
@@ -501,7 +522,7 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
         cars.forEach { 
             drawShadow(canvas, it.x, it.y, laneWidth * 0.9f, it.h * 0.3f)
             bitmaps["car"]?.let { bmp ->
-                val rect = RectF(it.x - laneWidth/2 + 5, it.y - it.h/2, it.x + laneWidth/2 - 5, it.y + it.h/2)
+                rect.set(it.x - laneWidth/2 + 5, it.y - it.h/2, it.x + laneWidth/2 - 5, it.y + it.h/2)
                 canvas.drawBitmap(bmp, null, rect, null)
             }
         }
@@ -516,7 +537,7 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
                 val bob = sin(animationTimer.toDouble()).toFloat()
                 canvas.translate(player.x, player.y + bob * 8f)
                 canvas.rotate(playerTilt); canvas.scale(1f + bob * 0.03f, 1f + bob * 0.03f)
-                canvas.drawBitmap(it, null, RectF(-90f, -90f, 90f, 90f), null)
+                canvas.drawBitmap(it, null, playerRect, null)
                 canvas.restore()
             }
         }
@@ -528,7 +549,8 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
     }
 
     private fun drawShadow(canvas: Canvas, x: Float, y: Float, w: Float, h: Float) {
-        canvas.drawOval(RectF(x - w/2, y + h*0.5f, x + w/2, y + h*0.9f), shadowPaint)
+        rect.set(x - w / 2, y + h * 0.5f, x + w / 2, y + h * 0.9f)
+        canvas.drawOval(rect, shadowPaint)
     }
 
     private fun drawWeather(canvas: Canvas) {
@@ -549,7 +571,7 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
 
     private fun drawEntity(canvas: Canvas, e: Entity, key: String) {
         bitmaps[key]?.let {
-            val rect = RectF(e.x - e.w / 2, e.y - e.h / 2, e.x + e.w / 2, e.y + e.h / 2)
+            rect.set(e.x - e.w / 2, e.y - e.h / 2, e.x + e.w / 2, e.y + e.h / 2)
             paint.alpha = if (e is House && e.hit) 150 else 255
             canvas.drawBitmap(it, null, rect, paint)
         }
@@ -589,11 +611,16 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
 
     override fun performClick(): Boolean { super.performClick(); return true }
     class Particle(val startX: Float, val startY: Float, val color: Int, val vx: Float, val vy: Float) {
-        private var curX = startX; private var curY = startY; var life = 1.0f 
+        private var curX = startX; private var curY = startY; var life = 1.0f
+        companion object {
+            private val rng = Random()
+            private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        } 
         fun update(dt: Float) { curX += vx * dt; curY += vy * dt; life -= dt * 2.0f }
         fun draw(canvas: Canvas) {
-            val p = Paint().apply { color = this@Particle.color; alpha = (life * 255).toInt().coerceIn(0, 255) }
-            canvas.drawCircle(curX, curY, Random().nextFloat() * 12f + 4f, p)
+            paint.color = color
+            paint.alpha = (life * 255).toInt().coerceIn(0, 255)
+            canvas.drawCircle(curX, curY, rng.nextFloat() * 12f + 4f, paint)
         }
     }
     class RainDrop(var x: Float, var y: Float)
