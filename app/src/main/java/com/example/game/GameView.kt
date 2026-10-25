@@ -66,7 +66,10 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
     private val SPAWN_COOLDOWN = 0.5f // Уменьшил (было 0.8) для динамики
 
     // Графика
-    private val bitmaps = mutableMapOf<String, Bitmap>()
+    private val bitmaps = mutableMapOf<String, Bitmap?>()
+    // Спрайты рисуются на canvas не крупнее 420px, поэтому декодировать исходники
+    // 2048x2048 целиком — только тратить память. Должно быть объявлено до init{}.
+    private val MAX_BITMAP_PX = 512
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.BLACK
@@ -123,19 +126,38 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
     }
 
     private fun loadBitmaps() {
-        val assets = context.assets
+        bitmaps["house"] = decodeSampled("img/house.png")
+        bitmaps["paper"] = decodeSampled("img/paper.png")
+        bitmaps["barrier"] = decodeSampled("img/barier.png")
+        bitmaps["car"] = decodeSampled("img/car.png")
+        bitmaps["bicycle"] = decodeSampled("img/character.png")
+        bitmaps["heart"] = decodeSampled("img/heart2.png")
+        bitmaps["coin"] = decodeSampled("img/coin.png")
+        bitmaps["obs_car"] = decodeSampled("img/obs_car.png")
+        bitmaps["obs_box"] = decodeSampled("img/obs_box.png")
+    }
+
+    private fun decodeSampled(path: String): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         try {
-            bitmaps["house"] = BitmapFactory.decodeStream(assets.open("img/house.png"))
-            bitmaps["paper"] = BitmapFactory.decodeStream(assets.open("img/paper.png"))
-            bitmaps["barrier"] = BitmapFactory.decodeStream(assets.open("img/barier.png"))
-            bitmaps["car"] = BitmapFactory.decodeStream(assets.open("img/car.png"))
-            bitmaps["bicycle"] = BitmapFactory.decodeStream(assets.open("img/character.png"))
-            bitmaps["heart"] = BitmapFactory.decodeStream(assets.open("img/heart2.png"))
-            bitmaps["coin"] = BitmapFactory.decodeStream(assets.open("img/coin.png"))
-            bitmaps["obs_car"] = BitmapFactory.decodeStream(assets.open("img/obs_car.png"))
-            bitmaps["obs_box"] = BitmapFactory.decodeStream(assets.open("img/obs_box.png"))
+            context.assets.open(path).use { BitmapFactory.decodeStream(it, null, bounds) }
         } catch (e: Exception) {
             e.printStackTrace()
+            return null
+        }
+        // Декодер понимает только степени двойки, поэтому подбираем минимальный
+        // sample, при котором обе стороны всё ещё не меньше целевого размера.
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= MAX_BITMAP_PX &&
+               bounds.outHeight / (sample * 2) >= MAX_BITMAP_PX) {
+            sample *= 2
+        }
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        return try {
+            context.assets.open(path).use { BitmapFactory.decodeStream(it, null, opts) }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
     }
 
